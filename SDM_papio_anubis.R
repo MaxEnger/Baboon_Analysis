@@ -47,14 +47,14 @@ plot(wrld_simpl, xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(oliv
 points(olive$lon, olive$lat, col = "blue", pch = 20, cex = 0.75)
 
 # Conserve the species distribution to Africa or its 'native' range
-olive <- olive[olive$lon < -40 & olive$lat > 25 , ]
+#olive <- olive[olive$lon < -40 & olive$lat > 25 , ]
 
 # Use a higher resolution map now that we will look more closely
-map('worldHires', xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), fill = TRUE, col = "light yellow")
+map('worldHires', xlim = c(min(olive$lon)+1, max(olive$lon)+1), ylim = c(min(olive$lat)+1, max(olive$lat)+1), fill = TRUE, col = "light yellow")
 points(olive$lon, olive$lat, col = "orange", pch = 20, cex = 0.75)  #plot the olive points
 
 # Crop the Geographic Extent to a region (10 degree buffer around species)
-model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, max(olive$lat)+10)
+model.extent <- extent(min(olive$lon)+10, max(olive$lon)-10, min(olive$lat)+10, max(olive$lat)-10)
 modelEnv = crop(currentEnv, model.extent)
 modelFutureEnv = crop(futureEnv, model.extent)
 
@@ -70,14 +70,14 @@ points(olive$lon, olive$lat, pch="+", cex=0.2)
 
 # SDM Construction and Assessment - cross-validation
 # randomly withhold 20% of observations and use the 80% as training data.
-oliveocc = cbind.data.frame(hemlock$lon, hemlock$lat) # make a data frame of the lat & lon for the model
+oliveocc = cbind.data.frame(olive$lon, olive$lat) # make a data frame of the lat & lon for the model
 fold <- kfold(oliveocc, k = 5) # add an index that makes five random groups of species observations. Under dismo package.
 olivetest <- oliveocc[fold == 1, ] # hold one fifth as testing data
 olivetrain <- oliveocc[fold != 1, ] # hold four firths as training data
 
 # Fit the SDM using Maximum Entropy (Maxent) algorithm
 # This tires to define the combination of env. responses that best predicts the occurrence of the species.
-olive.me <- maxent(modelEnv, hemlocktrain) # using only training data
+olive.me <- maxent(modelEnv, olivetrain) # using only training data
 
 # Model visualization and Evaluation
 # Compare the relative importance of different predictor variables in the model.
