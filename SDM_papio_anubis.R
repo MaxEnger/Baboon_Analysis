@@ -1,0 +1,125 @@
+# Papio anubis SDM: Olive Baboon
+# 10/27/2020
+# GEOG 389: Project
+# SDM R Tutorial for the Species Papio anubis
+
+# Importing libraries
+library(raster)
+library(rgdal)
+library(maps)
+library(mapdata)
+library(dismo)
+library(rJava)
+library(maptools)
+library(jsonlite)
+
+# Retrieving current and future environmental data from WorldClim (http://worldclim.org, Hijmans et al. 2005).GetData is from the raster package.
+currentEnv = getData("worldclim", var = "bio", res = 2.5) # The variables are bioclimatic and the resolution is 2.5 arc seconds.
+futureEnv = getData('CMIP5', var = 'bio', res = 2.5, rcp = 85, model = 'HE', year = 70) # CMIP5 refers to the phase 5 Coupled Model Intercomparison Project. RCP8.5 is used. Prediction is for the year 2070.
+names(futureEnv) = names(currentEnv) # names function used to set the name of an object.
+
+# Limit to a smaller set of bioclimatic predictors. Excluding the bioclimatic variables 2, 3, 4, 10, 11, 13, 14, and 15.
+currentEnv = dropLayer(currentEnv, c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
+futureEnv = dropLayer(futureEnv, c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
+
+# Remaining Bioclimatic Predictors
+# BIO1 = Annual Mean Temperature
+# BIO5 = Max Temperature of Warmest Month
+# BIO6 = Min Temperature of Coldest Month
+# BIO7 = Temperature Annual Range (BIO5-BIO6)
+# BIO8 = Mean Temperature of Wettest Quarter
+# BIO9 = Mean Temperature of Driest Quarter
+# BIO12 = Annual Precipitation
+# BIO16 = Precipitation of Wettest Quarter
+# BIO17 = Precipitation of Driest Quarter
+# BIO18 = Precipitation of Warmest Quarter
+# BIO19 = Precipitation of Coldest Quarter
+
+# Obtain species data from Global Biodiversity Information Facility (GBIF)
+olive = gbif('Papio', 'anubis') # gbif is under the package, dismo to access data directly using the scientific name of the species.
+olive = subset(olive, !is.na(lon) & !is.na(lat)) # remove all observations without lat and long (! means 'not')
+olivedups = duplicated(olive[, c("lon", "lat")]) # eliminate duplicate locations
+olive <- olive[!olivedups, ] # brackets indicate the position of items in a vector
+
+# Making a map extending 1 degree around the species observations (Preliminary Map of Species)
+data(wrld_simpl) # loads polygon world dataset, wrld_simpl
+plot(wrld_simpl, xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), axes = TRUE, col = "light yellow")
+points(olive$lon, olive$lat, col = "blue", pch = 20, cex = 0.75)
+
+# Conserve the species distribution to Africa or its 'native' range
+olive <- olive[olive$lon < -40 & olive$lat > 25 , ]
+
+# Use a higher resolution map now that we will look more closely
+map('worldHires', xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), fill = TRUE, col = "light yellow")
+points(olive$lon, olive$lat, col = "orange", pch = 20, cex = 0.75)  #plot the olive points
+
+# Crop the Geographic Extent to a region (10 degree buffer around species)
+model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, max(olive$lat)+10)
+modelEnv = crop(currentEnv, model.extent)
+modelFutureEnv = crop(futureEnv, model.extent)
+
+# Plot of the Annual Mean Temperature (bio1 variable)
+plot(modelEnv[["bio1"]]/10, main="Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+
+# Plot of the Future (2070) Annual Mean Temperature (bio1 variable)
+plot(modelFutureEnv[["bio1"]]/10, main="Future Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+
+# SDM Construction and Assessment - cross-validation
+# randomly withhold 20% of observations and use the 80% as training data.
+oliveocc = cbind.data.frame(hemlock$lon, hemlock$lat) # make a data frame of the lat & lon for the model
+fold <- kfold(oliveocc, k = 5) # add an index that makes five random groups of species observations. Under dismo package.
+olivetest <- oliveocc[fold == 1, ] # hold one fifth as testing data
+olivetrain <- oliveocc[fold != 1, ] # hold four firths as training data
+
+# Fit the SDM using Maximum Entropy (Maxent) algorithm
+# This tires to define the combination of env. responses that best predicts the occurrence of the species.
+olive.me <- maxent(modelEnv, hemlocktrain) # using only training data
+
+# Model visualization and Evaluation
+# Compare the relative importance of different predictor variables in the model.
+plot(olive.me)
+
+# See the response of species occurrence to variation in climatic conditions.
+response(olive.me)
+
+# Generate the predicted values for every cell in the region
+olive.pred <- predict(olive.me, modelEnv)
+
+# Map the predicted values and superimpose tem onto the original locations.
+plot(olive.pred, main = "Predicted Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.2)
+
+# Generate and Evaluate the AUC for the model
+
+# Create background points for pseudoabsences.
+bg <- randomPoints(modelEnv, 1000)
+
+# Evaluate using the test data as presences against pseudoabsences.
+e1 <- evaluate(olive.me, p = olivetest, a = bg, x = modelEnv)
+plot(e1, 'ROC')
+
+# Projecting Responses to Climate Change
+
+# Use the 2070 climate estimates to predic the habitat suitability using the model.
+olive.2070 = predict(olive.me, modelFutureEnv)
+
+# Map the predicted values and superimpose the current distribution of observations.
+plot(olive.2070, main = "Predicted Future Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.2)
+
+# Map the predicted change with positive values representing regions that are better suited for hemlock and negative for areas that represent decline in habitat quality.
+olive.change = olive.2070-olive.pred
+plot(olive.change, main = "Predicted Change in Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.2)
+
+# Histogram of the predicted change in habitat quality.
+oliveChangePoints = extract(olive.change, oliveocc)
+hist(oliveChangePoints, main = "")
+abline(v = 0, col = "red")
