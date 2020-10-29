@@ -19,19 +19,25 @@ library(dismo)
 library(rJava)
 library(maptools)
 library(jsonlite)
+library(dplyr)
+library(sf)
+library(readr)
+library(rgdal)
 ```
 
 ### Retrieving current and future environmental data from WorldClim (http://worldclim.org, Hijmans et al. 2005).GetData is from the raster package.
 ```{r}
-currentEnv = getData("worldclim", var = "bio", res = 2.5) # The variables are bioclimatic and the resolution is 2.5 arc seconds.
-futureEnv = getData('CMIP5', var = 'bio', res = 2.5, rcp = 85, model = 'HE', year = 70) # CMIP5 refers to the phase 5 Coupled Model Intercomparison Project. RCP8.5 is used. Prediction is for the year 2070.
+currentEnv <-  getData("worldclim", var = "bio", res = 2.5) # The variables are bioclimatic and the resolution is 2.5 arc seconds.
+futureEnv <-  getData('CMIP5', var = 'bio', res = 2.5, rcp = 85, model = 'HE', year = 70) # CMIP5 refers to the phase 5 Coupled Model Intercomparison Project. RCP8.5 is used. Prediction is for the year 2070.
 names(futureEnv) = names(currentEnv) # names function used to set the name of an object.
 ```
 
 ### Limit to a smaller set of bioclimatic predictors. Excluding the bioclimatic variables 2, 3, 4, 10, 11, 13, 14, and 15.
+- Use tidy/ dplyr methods
+- adapt this section
 ```{r}
-currentEnv = dropLayer(currentEnv, c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
-futureEnv = dropLayer(futureEnv, c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
+currentEnv <- currentEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
+futureEnv <- futureEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
 ```
 
 # Remaining Bioclimatic Predictors
@@ -48,8 +54,9 @@ futureEnv = dropLayer(futureEnv, c("bio2", "bio3", "bio4", "bio10", "bio11", "bi
 # BIO19 = Precipitation of Coldest Quarter
 
 ### Obtain species data from Global Biodiversity Information Facility (GBIF)
+- again maybe change to dplyr method
 ```{r}
-olive = gbif('Papio', 'anubis') # gbif is under the package, dismo to access data directly using the scientific name of the species.
+olive <- gbif('Papio', 'anubis') # gbif is under the package, dismo to access data directly using the scientific name of the species.
 olive = subset(olive, !is.na(lon) & !is.na(lat)) # remove all observations without lat and long (! means 'not')
 olivedups = duplicated(olive[, c("lon", "lat")]) # eliminate duplicate locations
 olive <- olive[!olivedups, ] # brackets indicate the position of items in a vector
@@ -57,23 +64,25 @@ olive <- olive[!olivedups, ] # brackets indicate the position of items in a vect
 
 ### Making a map extending 1 degree around the species observations (Preliminary Map of Species)
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+# load and read in data
 data(wrld_simpl) # loads polygon world dataset, wrld_simpl
-plot(wrld_simpl, xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), axes = TRUE, col = "light yellow")
-points(olive$lon, olive$lat, col = "blue", pch = 20, cex = 0.75)
+study_area <- readOGR("./data", layer = "StudyAreaPoly")  
+study_area_sf <- study_area %>% st_as_sf(coords = c("LAT", "LON"), st_crs(wrld_simpl))
 
+# plot 
+plot(wrld_simpl, xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), axes = TRUE, col = "grey", main = " Species Distribution of Papio anubis", cex.main = 1.75)
+plot(st_geometry(study_area_sf), col = "grey40", add = TRUE)
+points(olive$lon, olive$lat, col = "yellow", pch = 20, cex = 0.75)
 ```
 
 ### Conserve the species distribution to Africa or its 'native' range
+```{r}
 olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
-```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-# Use a higher resolution map now that we will look more closely
-map('worldHires', xlim = c(min(olive$lon)+1, max(olive$lon)+1), ylim = c(min(olive$lat)+1, max(olive$lat)+1), fill = TRUE, col = "light yellow")
-points(olive$lon, olive$lat, col = "orange", pch = 20, cex = 0.75)  #plot the olive points
 ```
 
 ### Crop the Geographic Extent to a region (10 degree buffer around species)
 ```{r}
-model.extent <- extent(min(olive$lon)+10, max(olive$lon)-10, min(olive$lat)+10, max(olive$lat)-10)
+model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, max(olive$lat)+10)
 modelEnv = crop(currentEnv, model.extent)
 modelFutureEnv = crop(futureEnv, model.extent)
 ```
@@ -90,6 +99,26 @@ points(olive$lon, olive$lat, pch="+", cex=0.2)
 plot(modelFutureEnv[["bio1"]]/10, main="Future Annual Mean Temperature")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+Before maxent:
+- need to include additional variables
+- then put into a single raster stack?
+- or do I run maxent mult times? I assume the first is true
+
+### Elevation
+```{r}
+
+```
+
+### Landcover
+```{r}
+
+```
+
+### EVI - Vegetation Index
+```{r}
+
 ```
 
 ## SDM Construction and Assessment - cross-validation
