@@ -80,11 +80,48 @@ points(olive$lon, olive$lat, col = "yellow", pch = 20, cex = 0.75)
 olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
 ```
 
+### Elevation
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+anubis_elevation <- read.csv("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/anubis.csv")
+test <- anubis_elevation %>% separate(., ".geo", c("x", "y", "z", "a"), sep = ":") %>% separate(., "a", c("x", "y"), sep = ",") %>% 
+test2 <- test %>% st_as_sf(., coords = c("x", "y"), crs = 5070)
+test3 <- gsub("\[|\\]", "", test[,4])
+
+
+# test with sample data
+dem_test <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/GDEM.tif")
+```
+
+### Landcover
+```{r}
+# test with sample data
+lc_test <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/product/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif")
+```
+
+### EVI - Vegetation Index
+```{r}
+
+```
+
 ### Crop the Geographic Extent to a region (10 degree buffer around species)
 ```{r}
 model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, max(olive$lat)+10)
+
+# elevation
+dem_test = crop(dem_test, model.extent)
+dem_resample <- resample(x= dem_test, y = modelEnv) 
+
+# landcover
+lc_test = crop(lc_test, model.extent)
+lc_resample <- resample(x= lc_test, y = modelEnv) 
+
 modelEnv = crop(currentEnv, model.extent)
 modelFutureEnv = crop(futureEnv, model.extent)
+
+modelEnv <- addLayer(modelEnv, dem_resample)
+modelEnv <- addLayer(modelEnv, lc_resample)
+modelFutureEnv <- addLayer(modelFutureEnv, dem_resample)
+modelFutureEnv <- addLayer(modelFutureEnv, lc_resample)
 ```
 
 ### Plot of the Annual Mean Temperature (bio1 variable)
@@ -99,26 +136,6 @@ points(olive$lon, olive$lat, pch="+", cex=0.2)
 plot(modelFutureEnv[["bio1"]]/10, main="Future Annual Mean Temperature")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
-```
-
-Before maxent:
-- need to include additional variables
-- then put into a single raster stack?
-- or do I run maxent mult times? I assume the first is true
-
-### Elevation
-```{r}
-
-```
-
-### Landcover
-```{r}
-
-```
-
-### EVI - Vegetation Index
-```{r}
-
 ```
 
 ## SDM Construction and Assessment - cross-validation
@@ -196,7 +213,7 @@ points(olive$lon, olive$lat, pch = "+", cex = 0.2)
 
 ### Histogram of the predicted change in habitat quality.
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-oliveChangePoints = extract(olive.change, oliveocc)
+oliveChangePoints = raster::extract(olive.change, oliveocc)
 hist(oliveChangePoints, main = "")
 abline(v = 0, col = "red")
 ```
