@@ -100,6 +100,29 @@ lc_test <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/produ
 
 ### EVI - Vegetation Index
 ```{r}
+#Homogeneity
+VegHom=raster("Homogeneity_01_05_1km_uint16.tif")
+resampledHom=resample(VegHom, modelEnv[['bio1']], method="bilinear",filename='resampledHom',overwrite=TRUE)
+VegHom=crop(resampledHom,model.extent)
+
+#Coefficient of variation
+VegCV=raster("cv_01_05_1km_uint16.tif")
+resampledCV=resample(VegCV, modelEnv[['bio1']], method="bilinear",filename='resampledCV')
+VegCV=crop(resampledCV,model.extent)
+
+
+#Contrast
+VegCon=raster("Contrast_01_05_1km_uint32.tif")
+resampledCon=resample(VegCon, modelEnv[['bio1']], method="bilinear",filename='resampledCon')
+VegCon=crop(resampledCon,model.extent)
+
+# add vegetation vars to climate varaibles 
+modelEnv = addLayer(modelEnv, VegCon)
+modelEnv = addLayer(modelEnv, VegHom)
+modelEnv = addLayer(modelEnv, VegCV)
+modelFutureEnv = addLayer(modelFutureEnv, VegCon)
+modelFutureEnv = addLayer(modelFutureEnv, VegHom)
+modelFutureEnv = addLayer(modelFutureEnv, VegCV)
 
 ```
 
