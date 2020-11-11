@@ -28,7 +28,6 @@ library(jsonlite)
 library(dplyr)
 library(sf)
 library(readr)
-library(rgdal)
 ```
 
 ### Retrieving current and future environmental data from WorldClim (http://worldclim.org, Hijmans et al. 2005).GetData is from the raster package.
@@ -85,9 +84,9 @@ olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
 
 ## Adding new variables
 - Can add other environmental variables to the model if needed
+- should probably add links to where data is from
 
 ### Elevation
-
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
 # test with sample raster data
 dem <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/dem_2.tif")
