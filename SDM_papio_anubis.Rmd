@@ -7,6 +7,12 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+## To Do:
+1. Need to filter observation dates if we want to use land cover data (can use dplyr filter or select functions)
+2. Need to reclass Land Cover data and EVI - contrast (any that has background 0)
+3. Clean up documentation
+4. Make maps prettier (can use ggplot)
+5. If time allows could find more environmental variables to add to maxent
 
 ## Papio anubis SDM: Olive Baboon
 ### Importing libraries
@@ -33,8 +39,6 @@ names(futureEnv) = names(currentEnv) # names function used to set the name of an
 ```
 
 ### Limit to a smaller set of bioclimatic predictors. Excluding the bioclimatic variables 2, 3, 4, 10, 11, 13, 14, and 15.
-- Use tidy/ dplyr methods
-- adapt this section
 ```{r}
 currentEnv <- currentEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
 futureEnv <- futureEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
@@ -54,11 +58,10 @@ futureEnv <- futureEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio
 # BIO19 = Precipitation of Coldest Quarter
 
 ### Obtain species data from Global Biodiversity Information Facility (GBIF)
-- again maybe change to dplyr method
 ```{r}
 olive <- gbif('Papio', 'anubis') # gbif is under the package, dismo to access data directly using the scientific name of the species.
-olive = subset(olive, !is.na(lon) & !is.na(lat)) # remove all observations without lat and long (! means 'not')
-olivedups = duplicated(olive[, c("lon", "lat")]) # eliminate duplicate locations
+olive <- subset(olive, !is.na(lon) & !is.na(lat)) # remove all observations without lat and long (! means 'not')
+olivedups <- duplicated(olive[, c("lon", "lat")]) # eliminate duplicate locations
 olive <- olive[!olivedups, ] # brackets indicate the position of items in a vector
 ```
 
@@ -80,16 +83,14 @@ points(olive$lon, olive$lat, col = "yellow", pch = 20, cex = 0.75)
 olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
 ```
 
+## Adding new variables
+- Can add other environmental variables to the model if needed
+
 ### Elevation
+
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-anubis_elevation <- read.csv("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/anubis.csv")
-test <- anubis_elevation %>% separate(., ".geo", c("x", "y", "z", "a"), sep = ":") %>% separate(., "a", c("x", "y"), sep = ",") %>% 
-test2 <- test %>% st_as_sf(., coords = c("x", "y"), crs = 5070)
-test3 <- gsub("\[|\\]", "", test[,4])
-
-
-# test with sample data
-dem_test <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/GDEM.tif")
+# test with sample raster data
+dem <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/dem_2.tif")
 ```
 
 ### Landcover
@@ -100,28 +101,52 @@ lc_test <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/produ
 
 ### EVI - Vegetation Index
 ```{r}
-
+EVI_cv <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/cv_01_05_1km_uint16.tif")
+EVI_con <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/Contrast_01_05_1km_uint32.tif")
+EVI_hom <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/Homogeneity_01_05_1km_uint16.tif")
 ```
 
 ### Crop the Geographic Extent to a region (10 degree buffer around species)
 ```{r}
+# define the spatial extent of the model
 model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, max(olive$lat)+10)
 
-# elevation
-dem_test = crop(dem_test, model.extent)
-dem_resample <- resample(x= dem_test, y = modelEnv) 
-
-# landcover
-lc_test = crop(lc_test, model.extent)
-lc_resample <- resample(x= lc_test, y = modelEnv) 
-
+# define current and future env. RasterStacks
 modelEnv = crop(currentEnv, model.extent)
 modelFutureEnv = crop(futureEnv, model.extent)
 
+# crop elevation to the same extent and resample
+dem = crop(dem, model.extent)
+dem_resample <- resample(x= dem, y = modelEnv) 
+
+# crop EVI variables to the same extent
+EVI_cv = crop(EVI_cv, model.extent)
+EVI_cv_resample <- resample(x= EVI_cv, y = modelEnv) 
+
+EVI_con = crop(EVI_con, model.extent)
+EVI_con_resample <- resample(x= EVI_con, y = modelEnv) 
+
+EVI_hom = crop(EVI_hom, model.extent)
+EVI_hom_resample <- resample(x= EVI_hom, y = modelEnv) 
+# crop and resample land cover
+#m = c(210, 9999, 1)
+#rclmat <- matrix(m, ncol=, byrow=TRUE)
+#lc_test <- reclassify(lc_test, rclmat)
+lc_test = crop(lc_test, model.extent)
+lc_resample <- resample(x= lc_test, y = modelEnv) 
+
+# add elevation and land cover data to raster stacks for model
 modelEnv <- addLayer(modelEnv, dem_resample)
 modelEnv <- addLayer(modelEnv, lc_resample)
+modelEnv <- addLayer(modelEnv, EVI_cv_resample)
+modelEnv <- addLayer(modelEnv, EVI_con_resample)
+modelEnv <- addLayer(modelEnv, EVI_hom_resample)
+
 modelFutureEnv <- addLayer(modelFutureEnv, dem_resample)
 modelFutureEnv <- addLayer(modelFutureEnv, lc_resample)
+modelFutureEnv <- addLayer(modelFutureEnv, EVI_cv_resample)
+modelFutureEnv <- addLayer(modelFutureEnv, EVI_con_resample)
+modelFutureEnv <- addLayer(modelFutureEnv, EVI_hom_resample)
 ```
 
 ### Plot of the Annual Mean Temperature (bio1 variable)
@@ -134,6 +159,41 @@ points(olive$lon, olive$lat, pch="+", cex=0.2)
 ### Plot of the Future (2070) Annual Mean Temperature (bio1 variable)
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
 plot(modelFutureEnv[["bio1"]]/10, main="Future Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot Elevation
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(dem_resample, main="Elevation")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot Land Cover
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(lc_resample, main="Land Cover")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot EVI - coefficient of variation
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(EVI_cv_resample, main="EVI - coefficent of variation")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot EVI - contrast
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(EVI_con_resample, main="EVI - contrast")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot EVI - homogeneity
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(EVI_hom_resample, main="EVI - homogeneity")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
