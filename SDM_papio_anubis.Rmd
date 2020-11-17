@@ -102,6 +102,12 @@ EVI_con <- raster("V:/Commons/Baboon/SDM_data/Contrast_01_05_1km_uint32_0_1.tif"
 EVI_hom <- raster("V:/Commons/Baboon/SDM_data/Homogeneity_01_05_1km_uint16_0_1.tif")
 ```
 
+### Mask
+```{r}
+rcl = matrix(c(-279,0,1,1,320,1), ncol=3, byrow=TRUE)
+mask <- reclassify(x =  currentEnv$bio1, rcl = rcl)
+```
+
 ### Crop the Geographic Extent to a region (10 degree buffer around species)
 ```{r}
 # define the spatial extent of the model
@@ -111,25 +117,32 @@ model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, 
 modelEnv = crop(currentEnv, model.extent)
 modelFutureEnv = crop(futureEnv, model.extent)
 
+# mask crop and resample
+mask = crop(mask, model.extent)
+mask_resample <- resample(x= mask, y = modelEnv) 
+
 # crop elevation to the same extent and resample
 dem = crop(dem, model.extent)
 dem_resample <- resample(x= dem, y = modelEnv) 
+demEnv <- mask_resample * dem_resample
 
 # crop EVI variables to the same extent
 EVI_cv = crop(EVI_cv, model.extent)
 EVI_cv_resample <- resample(x= EVI_cv, y = modelEnv) 
+EVI_cvEnv <- mask_resample * EVI_cv_resample
 
 EVI_con = crop(EVI_con, model.extent)
 EVI_con_resample <- resample(x= EVI_con, y = modelEnv) 
+EVI_conEnv <- mask_resample * EVI_con_resample
 
 EVI_hom = crop(EVI_hom, model.extent)
 EVI_hom_resample <- resample(x= EVI_hom, y = modelEnv) 
-# crop and resample land cover
-#m = c(210, 9999, 1)
-#rclmat <- matrix(m, ncol=, byrow=TRUE)
-#lc_test <- reclassify(lc_test, rclmat)
+EVI_homEnv <- mask_resample * EVI_hom_resample
+
+# crop land cover, resample, and mask
 lc_test = crop(lc_test, model.extent)
 lc_resample <- resample(x= lc_test, y = modelEnv) 
+lcEnv <- mask_resample * lc_resample
 
 # add elevation and land cover data to raster stacks for model
 modelEnv <- addLayer(modelEnv, dem_resample)
@@ -206,7 +219,7 @@ olivetrain <- oliveocc[fold != 1, ] # hold four firths as training data
 ## Fit the SDM using Maximum Entropy (Maxent) algorithm
 ### This tires to define the combination of env. responses that best predicts the occurrence of the species.
 ```{r}
-olive.me <- maxent(modelEnv, olivetrain) # using only training data
+olive.me <- maxent(modelEnv, olivetrain, factors = 'lc_resample') # using only training data
 ```
 
 ## Model visualization and Evaluation
