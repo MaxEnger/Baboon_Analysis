@@ -174,35 +174,35 @@ points(olive$lon, olive$lat, pch="+", cex=0.2)
 
 ### Plot Elevation
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(dem_resample, main="Elevation")
+plot(demEnv, main="Elevation")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
 
 ### Plot Land Cover
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(lc_resample, main="Land Cover")
+plot(lcEnv, main="Land Cover")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
 
 ### Plot EVI - coefficient of variation
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(EVI_cv_resample, main="EVI - coefficent of variation")
+plot(EVI_cvEnv, main="EVI - coefficent of variation")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
 
 ### Plot EVI - contrast
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(EVI_con_resample, main="EVI - contrast")
+plot(EVI_conEnv, main="EVI - contrast")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
 
 ### Plot EVI - homogeneity
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(EVI_hom_resample, main="EVI - homogeneity")
+plot(EVI_homEnv, main="EVI - homogeneity")
 map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
