@@ -1,0 +1,262 @@
+---
+  title: "Papio anubis SDM: Olive Baboon"
+date: "10/27/2020"
+output: html_document
+---
+  
+  ```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## To Do:
+1. Need to filter observation dates if we want to use land cover data (can use dplyr filter or select functions)
+2. Need to reclass Land Cover data and EVI - contrast (any that has background 0)
+3. Clean up documentation
+4. Make maps prettier (can use ggplot)
+5. If time allows could find more environmental variables to add to maxent
+
+## Papio anubis SDM: Olive Baboon
+### Importing libraries
+```{r}
+library(raster)
+library(rgdal)
+library(maps)
+library(mapdata)
+library(dismo)
+library(rJava)
+library(maptools)
+library(jsonlite)
+library(dplyr)
+library(sf)
+library(readr)
+```
+
+### Retrieving current and future environmental data from WorldClim (http://worldclim.org, Hijmans et al. 2005).GetData is from the raster package.
+```{r}
+currentEnv <-  getData("worldclim", var = "bio", res = 2.5) # The variables are bioclimatic and the resolution is 2.5 arc seconds.
+futureEnv <-  getData('CMIP5', var = 'bio', res = 2.5, rcp = 85, model = 'HE', year = 70) # CMIP5 refers to the phase 5 Coupled Model Intercomparison Project. RCP8.5 is used. Prediction is for the year 2070.
+names(futureEnv) = names(currentEnv) # names function used to set the name of an object.
+```
+
+### Limit to a smaller set of bioclimatic predictors. Excluding the bioclimatic variables 2, 3, 4, 10, 11, 13, 14, and 15.
+```{r}
+currentEnv <- currentEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
+futureEnv <- futureEnv %>% dropLayer(. , c("bio2", "bio3", "bio4", "bio10", "bio11", "bio13", "bio14", "bio15"))
+```
+
+# Remaining Bioclimatic Predictors
+# BIO1 = Annual Mean Temperature
+# BIO5 = Max Temperature of Warmest Month
+# BIO6 = Min Temperature of Coldest Month
+# BIO7 = Temperature Annual Range (BIO5-BIO6)
+# BIO8 = Mean Temperature of Wettest Quarter
+# BIO9 = Mean Temperature of Driest Quarter
+# BIO12 = Annual Precipitation
+# BIO16 = Precipitation of Wettest Quarter
+# BIO17 = Precipitation of Driest Quarter
+# BIO18 = Precipitation of Warmest Quarter
+# BIO19 = Precipitation of Coldest Quarter
+
+### Obtain species data from Global Biodiversity Information Facility (GBIF)
+```{r}
+olive <- gbif('Papio', 'anubis') # gbif is under the package, dismo to access data directly using the scientific name of the species.
+olive <- subset(olive, !is.na(lon) & !is.na(lat)) # remove all observations without lat and long (! means 'not')
+olivedups <- duplicated(olive[, c("lon", "lat")]) # eliminate duplicate locations
+olive <- olive[!olivedups, ] # brackets indicate the position of items in a vector
+```
+
+### Making a map extending 1 degree around the species observations (Preliminary Map of Species)
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+# load and read in data
+data(wrld_simpl) # loads polygon world dataset, wrld_simpl
+study_area <- readOGR("./data", layer = "StudyAreaPoly")  
+study_area_sf <- study_area %>% st_as_sf(coords = c("LAT", "LON"), st_crs(wrld_simpl))
+# plot 
+plot(wrld_simpl, xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), axes = TRUE, col = "grey", main = " Species Distribution of Papio anubis", cex.main = 1.75)
+plot(st_geometry(study_area_sf), col = "grey40", add = TRUE)
+points(olive$lon, olive$lat, col = "yellow", pch = 20, cex = 0.75)
+```
+
+### Conserve the species distribution to Africa or its 'native' range
+```{r}
+olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
+```
+
+## Adding new variables
+### Elevation
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+# test with sample raster data
+dem <- raster('C:/Users/Max/Desktop/sem3/HM_CGIS/collab_proj/r_outputs/dem_2.tif')
+dem_crop <- crop(dem,modelEnv)
+dem_plot <- plot(dem_crop)
+
+```
+
+### EVI - Vegetation Index
+```{r}
+evi3 <- raster('C:/Users/Max/Desktop/sem3/HM_CGIS/collab_proj/r_outputs/Homogeneity_01_05_1km_uint16.tif')
+evi_crop3 <-crop(evi3,modelEnv)
+evi_use <- evi_crop3/10000
+evi_plot3 <- plot(evi_use)
+```
+
+### Mask
+```{r}
+rcl = matrix(c(-279,0,1,1,320,1), ncol=3, byrow=TRUE)
+mask <- reclassify(x =  currentEnv$bio1, rcl = rcl)
+```
+
+### Crop the Geographic Extent to a region (10 degree buffer around species)
+```{r}
+# define the spatial extent of the model
+model.extent <- extent(min(olive$lon)-10, max(olive$lon)+10, min(olive$lat)-10, max(olive$lat)+10)
+# define current and future env. RasterStacks
+modelEnv = crop(currentEnv, model.extent)
+modelFutureEnv = crop(futureEnv, model.extent)
+dem_evi <- resample(dem_crop,evi_crop3,method = 'bilinear')
+evi_model <- resample(evi_crop3,modelEnv,method = 'bilinear')
+test <- resample(dem_evi,modelEnv,method = 'bilinear')
+
+f_test <- crop(futureEnv,extent(test))
+
+s <- stack(test,evi_model, modelEnv)
+s2 <- stack(test,evi_model, f_test)
+```
+
+### Plot of the Annual Mean Temperature (bio1 variable)
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(modelEnv[["bio1"]]/10, main="Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot of the Future (2070) Annual Mean Temperature (bio1 variable)
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(modelFutureEnv[["bio1"]]/10, main="Future Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot Elevation
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(demEnv, main="Elevation")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot Land Cover
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(lcEnv, main="Land Cover")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot EVI - coefficient of variation
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(EVI_cvEnv, main="EVI - coefficent of variation")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot EVI - contrast
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(EVI_conEnv, main="EVI - contrast")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+### Plot EVI - homogeneity
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(EVI_homEnv, main="EVI - homogeneity")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.2)
+```
+
+## SDM Construction and Assessment - cross-validation
+### randomly withhold 20% of observations and use the 80% as training data.
+```{r}
+oliveocc = cbind.data.frame(olive$lon, olive$lat) # make a data frame of the lat & lon for the model
+fold <- kfold(oliveocc, k = 5) # add an index that makes five random groups of species observations. Under dismo package.
+olivetest <- oliveocc[fold == 1, ] # hold one fifth as testing data
+olivetrain <- oliveocc[fold != 1, ] # hold four firths as training data
+```
+
+## Fit the SDM using Maximum Entropy (Maxent) algorithm
+### This tires to define the combination of env. responses that best predicts the occurrence of the species.
+```{r}
+
+olive.me <- maxent(s, olivetrain) # using only training data
+plot(olive.me)
+response(olive.me)
+
+```
+
+## Model visualization and Evaluation
+### Compare the relative importance of different predictor variables in the model.
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(olive.me)
+```
+
+### See the response of species occurrence to variation in climatic conditions.
+```{r}
+response(olive.me)
+```
+
+### Generate the predicted values for every cell in the region
+```{r}
+olive.pred <- predict(olive.me, s)
+```
+
+### Map the predicted values and superimpose tem onto the original locations.
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(olive.pred, main = "Predicted Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.2)
+```
+
+## Generate and Evaluate the AUC for the model
+
+### Create background points for pseudoabsences.
+```{r}
+bg <- randomPoints(modelEnv, 1000)
+```
+
+### Evaluate using the test data as presences against pseudoabsences.
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+e1 <- evaluate(olive.me, p = olivetest, a = bg, x = modelEnv)
+plot(e1, 'ROC')
+```
+
+## Projecting Responses to Climate Change
+
+### Use the 2070 climate estimates to predic the habitat suitability using the model.
+```{r}
+olive.2070 = predict(olive.me, modelFutureEnv)
+```
+
+### Map the predicted values and superimpose the current distribution of observations.
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+plot(olive.2070, main = "Predicted Future Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.2)
+```
+
+### Map the predicted change with positive values representing regions that are better suited for hemlock and negative for areas that represent decline in habitat quality.
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+olive.change = olive.2070-olive.pred
+plot(olive.change, main = "Predicted Change in Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.2)
+```
+
+### Histogram of the predicted change in habitat quality.
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+oliveChangePoints = raster::extract(olive.change, oliveocc)
+hist(oliveChangePoints, main = "")
+abline(v = 0, col = "red")
+```
+
+### Export Raster
+```{r}
+writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/olive_suitability.tif", overwrite = TRUE)
+writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/olive_future_suit.tif", overwrite = TRUE)
+```
