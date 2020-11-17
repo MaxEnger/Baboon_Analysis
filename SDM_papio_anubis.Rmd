@@ -83,26 +83,23 @@ olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
 ```
 
 ## Adding new variables
-- Can add other environmental variables to the model if needed
-- should probably add links to where data is from
-
 ### Elevation
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
 # test with sample raster data
-dem <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/dem_2.tif")
+dem <- raster("inst/extdata/dem_2.tif")
 ```
 
 ### Landcover
 ```{r}
 # test with sample data
-lc_test <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/product/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif")
+lc_test <- raster("inst/extdata/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif")
 ```
 
 ### EVI - Vegetation Index
 ```{r}
-EVI_cv <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/cv_01_05_1km_uint16.tif")
-EVI_con <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/Contrast_01_05_1km_uint32.tif")
-EVI_hom <- raster("C:/Users/Caroline/Documents/GitHub/Baboon_Analysis/data/Homogeneity_01_05_1km_uint16.tif")
+EVI_cv <- raster("V:/Commons/Baboon/SDM_data/cv_01_05_1km_uint16_0_1.tif")
+EVI_con <- raster("V:/Commons/Baboon/SDM_data/Contrast_01_05_1km_uint32_0_1.tif")
+EVI_hom <- raster("V:/Commons/Baboon/SDM_data/Homogeneity_01_05_1km_uint16_0_1.tif")
 ```
 
 ### Crop the Geographic Extent to a region (10 degree buffer around species)
@@ -276,3 +273,10 @@ oliveChangePoints = raster::extract(olive.change, oliveocc)
 hist(oliveChangePoints, main = "")
 abline(v = 0, col = "red")
 ```
+
+### Export Raster
+```{r}
+writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/olive_suitability.tif", overwrite = TRUE)
+writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/olive_future_suit.tif", overwrite = TRUE)
+```
+
