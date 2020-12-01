@@ -8,11 +8,9 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 ## To Do:
-1. Need to filter observation dates if we want to use land cover data (can use dplyr filter or select functions)
-2. Need to reclass Land Cover data and EVI - contrast (any that has background 0)
-3. Clean up documentation
-4. Make maps prettier (can use ggplot)
-5. If time allows could find more environmental variables to add to maxent
+1. Make side-by-side plots of input variables
+2. Clean up documentation
+3. Make this reproducible or try to have download.file function to retrieve data
 
 ## Papio anubis SDM: Olive Baboon
 ### Importing libraries
@@ -89,17 +87,9 @@ olive <- olive[olive$lon < 45 & olive$lat > -15 , ]
 dem <- raster("inst/extdata/dem_2.tif")
 ```
 
-### Landcover
-```{r}
-# test with sample data
-lc_test <- raster("inst/extdata/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif")
-```
-
 ### EVI - Vegetation Index
 ```{r}
-EVI_cv <- raster("V:/Commons/Baboon/SDM_data/cv_01_05_1km_uint16_0_1.tif")
-EVI_con <- raster("V:/Commons/Baboon/SDM_data/Contrast_01_05_1km_uint32_0_1.tif")
-EVI_hom <- raster("V:/Commons/Baboon/SDM_data/Homogeneity_01_05_1km_uint16_0_1.tif")
+EVI_hom <- raster("V:/Commons/Baboon/SDM_data/Homogeneity_01_05_1km_uint16.tif")
 ```
 
 ### Mask
@@ -127,35 +117,17 @@ dem_resample <- resample(x= dem, y = modelEnv)
 demEnv <- mask_resample * dem_resample
 
 # crop EVI variables to the same extent
-EVI_cv = crop(EVI_cv, model.extent)
-EVI_cv_resample <- resample(x= EVI_cv, y = modelEnv) 
-EVI_cvEnv <- mask_resample * EVI_cv_resample
-
-EVI_con = crop(EVI_con, model.extent)
-EVI_con_resample <- resample(x= EVI_con, y = modelEnv) 
-EVI_conEnv <- mask_resample * EVI_con_resample
-
 EVI_hom = crop(EVI_hom, model.extent)
-EVI_hom_resample <- resample(x= EVI_hom, y = modelEnv) 
+EVI_hom_rescale <- EVI_hom/10000
+EVI_hom_resample <- resample(x= EVI_hom_rescale, y = modelEnv)
 EVI_homEnv <- mask_resample * EVI_hom_resample
 
-# crop land cover, resample, and mask
-lc_test = crop(lc_test, model.extent)
-lc_resample <- resample(x= lc_test, y = modelEnv) 
-lcEnv <- mask_resample * lc_resample
+# add elevation and EVI data to raster stacks for model
+modelEnv <- addLayer(modelEnv, demEnv)
+modelEnv <- addLayer(modelEnv, EVI_homEnv)
 
-# add elevation and land cover data to raster stacks for model
-modelEnv <- addLayer(modelEnv, dem_resample)
-modelEnv <- addLayer(modelEnv, lc_resample)
-modelEnv <- addLayer(modelEnv, EVI_cv_resample)
-modelEnv <- addLayer(modelEnv, EVI_con_resample)
-modelEnv <- addLayer(modelEnv, EVI_hom_resample)
-
-modelFutureEnv <- addLayer(modelFutureEnv, dem_resample)
-modelFutureEnv <- addLayer(modelFutureEnv, lc_resample)
-modelFutureEnv <- addLayer(modelFutureEnv, EVI_cv_resample)
-modelFutureEnv <- addLayer(modelFutureEnv, EVI_con_resample)
-modelFutureEnv <- addLayer(modelFutureEnv, EVI_hom_resample)
+modelFutureEnv <- addLayer(modelFutureEnv, demEnv)
+modelFutureEnv <- addLayer(modelFutureEnv, EVI_homEnv)
 ```
 
 ### Plot of the Annual Mean Temperature (bio1 variable)
@@ -179,27 +151,6 @@ map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$l
 points(olive$lon, olive$lat, pch="+", cex=0.2)
 ```
 
-### Plot Land Cover
-```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(lcEnv, main="Land Cover")
-map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
-points(olive$lon, olive$lat, pch="+", cex=0.2)
-```
-
-### Plot EVI - coefficient of variation
-```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(EVI_cvEnv, main="EVI - coefficent of variation")
-map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
-points(olive$lon, olive$lat, pch="+", cex=0.2)
-```
-
-### Plot EVI - contrast
-```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
-plot(EVI_conEnv, main="EVI - contrast")
-map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
-points(olive$lon, olive$lat, pch="+", cex=0.2)
-```
-
 ### Plot EVI - homogeneity
 ```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
 plot(EVI_homEnv, main="EVI - homogeneity")
@@ -219,7 +170,7 @@ olivetrain <- oliveocc[fold != 1, ] # hold four firths as training data
 ## Fit the SDM using Maximum Entropy (Maxent) algorithm
 ### This tires to define the combination of env. responses that best predicts the occurrence of the species.
 ```{r}
-olive.me <- maxent(modelEnv, olivetrain, factors = 'lc_resample') # using only training data
+olive.me <- maxent(modelEnv, olivetrain) # using only training data
 ```
 
 ## Model visualization and Evaluation
@@ -259,7 +210,6 @@ plot(e1, 'ROC')
 ```
 
 ## Projecting Responses to Climate Change
-
 ### Use the 2070 climate estimates to predic the habitat suitability using the model.
 ```{r}
 olive.2070 = predict(olive.me, modelFutureEnv)
@@ -288,8 +238,213 @@ abline(v = 0, col = "red")
 ```
 
 ### Export Raster
+```{r, eval = FASLE}
+writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/output/olive_suitability_final.tif", overwrite = FALSE)
+writeRaster(olive.2070, "V:/Commons/Baboon/SDM_data/output/olive_future_suit_final.tif", overwrite = FALSE)
+```
+
+### Maps for Final Report
+#### Species Observation Map
+```{r, fig.height = 4, fig.width =6, fig.align = 'center'}
+par(mfrow=c(1,1))
+plot(wrld_simpl, xlim = c(min(olive$lon)-1, max(olive$lon)+1), ylim = c(min(olive$lat)-1, max(olive$lat)+1), axes = TRUE, col = "grey", main = " Species Distribution of Papio anubis", cex.main = 1.75)
+plot(st_geometry(study_area_sf), col = "grey40", add = TRUE)
+points(olive$lon, olive$lat, col = "yellow", pch = 20, cex = 0.75)
+```
+
+#### Plot of Key Variables
+````{r}
+par(mfrow=c(2,2))
+plot(modelEnv[["bio1"]]/10, main="Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.4)
+
+plot(modelFutureEnv[["bio1"]]/10, main="Future Annual Mean Temperature")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.4)
+
+plot(demEnv, main="Elevation")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.4)
+
+plot(EVI_homEnv, main="EVI - homogeneity")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill=FALSE, add=TRUE)
+points(olive$lon, olive$lat, pch="+", cex=0.4)
+```
+
+#### Plot Results
 ```{r}
-writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/olive_suitability.tif", overwrite = TRUE)
-writeRaster(olive.pred, "V:/Commons/Baboon/SDM_data/olive_future_suit.tif", overwrite = TRUE)
+par(mfrow=c(1,2))
+plot(olive.pred, main = "Predicted Suitability")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.4)
+
+plot(olive.change, main = "Predicted Change in Suitability")
+map('worldHires',xlim=c(min(olive$lon)-10,max(olive$lon)+10), ylim=c(min(olive$lat)-10,max(olive$lat)+10), fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.4)
+```
+
+```{r}
+par(mfrow=c(1,3))
+plot(olive.pred, main = "Predicted Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.4)
+
+plot(olive.2070, main = "Predicted Future Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.4)
+
+olive.change = olive.2070-olive.pred
+plot(olive.change, main = "Predicted Change in Suitability")
+map('worldHires', fill = FALSE, add = TRUE)
+points(olive$lon, olive$lat, pch = "+", cex = 0.4)
+```
+
+# maps for report 2
+```{r}
+olive_sf <- st_as_sf(olive, coords = c("lon", "lat"), crs = 4269)
+olive_sf <- olive_sf %>% st_transform(., st_crs(demEnv))
+olive_sp <- as(olive_sf, 'Spatial')
+poly <- st_read("C:/Users/Caroline/Documents/Professional/Clark Labs/Global_Countries/countries.shp")
+poly_sf <- st_as_sf(poly, coords = "geometry", crs = 4269)
+poly_sf <- poly_sf %>% st_transform(., st_crs(demEnv))
+poly_sp <- as(poly_sf, 'Spatial')
+poly_sp = crop(poly_sp, model.extent)
+```
+
+```{r}
+library(lattice)
+library(rasterVis)
+library(GISTools) 
+library(viridisLite)
+library(sp)
+library(ggsn)
+library(prettymapr)
+library(ggspatial)
+```
+
+```{r}
+col = viridis(100)
+par(mfrow=c(2,2))
+p1 <- levelplot(modelEnv[["bio1"]]/10,
+                margin = FALSE,
+                xlab = "",
+                ylab = "",
+                scales=list(draw = FALSE),
+                main = "Annual Mean Temperature", 
+                col.regions = col,
+                par.settings= list(panel.background = list(col = "grey")),
+                colorkey = list(axis.line = list(col = "white"), 
+                           axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+#tmp <- layer()
+#layout = c(north.arrow(xb=15.75, yb=43.25, len=0.05, lab="N"), layout.scale.bar()),
+
+p2 <- levelplot(modelFutureEnv[["bio1"]]/10,
+          margin = FALSE,
+          xlab = "",
+          ylab = "",
+          scales=list(draw = FALSE),
+          main = "Future Annual Mean Temperature",
+          col.regions = col,
+          par.settings= list(panel.background = list(col = "grey")),
+          colorkey = list(axis.line = list(col = "white"), 
+                    axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+p3 <- levelplot(demEnv,
+          margin = FALSE,
+          xlab = "",
+          ylab = "",
+          scales=list(draw = FALSE),
+          main = "Elevation",
+          col.regions = rev(col),
+          par.settings= list(panel.background = list(col = "grey")),
+          colorkey = list(axis.line = list(col = "white"), 
+                     axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+p4 <- levelplot(EVI_homEnv,
+          margin = FALSE,
+          xlab = "",
+          ylab = "",
+          scales=list(draw = FALSE),
+          main = "EVI - homogeneity",
+          col.regions = col,
+          par.settings= list(panel.background = list(col = "grey")),
+          colorkey = list(axis.line = list(col = "white"), 
+                     axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+cowplot::plot_grid(p1, p2, p3, p4, nrow = 2, ncol = 2, labels = "AUTO") +
+  annotation_scale(location = "bl", width_hint = .4, plot_unit = 'km', mapping = aes(unit_category = "metric"),
+                   pad_x = unit(0.15, "in"), pad_y = unit(0.15, "in")) +
+  annotation_north_arrow(location = "bl", which_north = "true", 
+                         pad_x = unit(4.1, "in"), pad_y = unit(0, "in"),
+                         style = north_arrow_fancy_orienteering)
+
+#prettymapr::addnortharrow(pos = "topright", padin = c(0.15, 0.15), scale = 1, lwd = 1, border = "black", cols = c("white", "black"),
+#text.col = "black")
+```
+#tmap::tm_compass(position = c("left", "bottom")) 
+#tm_scale_bar(position = c("left", "bottom"))
+
+#+ GISTools::north.arrow(xb=-20, yb=-20, len=0.07, lab="N", col="black",cex.lab = 0.9) 
+#north2(map,x=0.12,y=0.90, scale=0.09, symbol=3) 
+#+ ggsn::north2( ggp = .,x = 0.65, y = 0.9, scale = 0.1, symbol = 1)
+#+ GISTools::north.arrow(xb=-20, yb=-20, len=0.07, lab="N", col="black",cex.lab = 0.9) + GISTools::map.scale(xc = -20, yc=-20, len=0.7, units = "km",subdiv = 5, sfcol = "white", ndivs = 3)
+#map.scale(x=15.5, y=42.75, len=0.5) 
+#north.arrow(xb=15.75, yb=43.25, len=0.05, lab="N")  
+
+
+```{r}
+par(mfrow=c(1,3))
+p5 <- levelplot(olive.pred,
+          margin = FALSE,
+          xlab = "",
+          ylab = "",
+          scales=list(draw = FALSE),
+          main = "Predicted Suitability",
+          col.regions = rev(col),
+          par.settings= list(panel.background = list(col = "grey")),
+          colorkey = list(axis.line = list(col = "white"), 
+                     axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+p6 <- levelplot(olive.2070,
+          margin = FALSE,
+          xlab = "",
+          ylab = "",
+          scales=list(draw = FALSE),
+          main = "Predicted Future Suitability",
+          col.regions = rev(col),
+          discrete = TRUE,
+          par.settings= list(panel.background = list(col = "grey")),
+          colorkey = list(axis.line = list(col = "white"), 
+                     axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+p7 <- levelplot(olive.change,
+          margin = FALSE,
+          xlab = "",
+          ylab = "",
+          scales=list(draw = FALSE),
+          main = "Predicted Change in Suitability",
+          col.regions = col,
+          discrete = TRUE,
+          par.settings= list(panel.background = list(col = "grey")),
+          colorkey = list(axis.line = list(col = "white"), 
+                     axis.text = list(col = "black"))) + 
+  latticeExtra::layer(sp.points(olive_sp, pch =3, col = "black")) + 
+  latticeExtra::layer(sp.polygons(poly_sp, col = "black"))
+
+cowplot::plot_grid(p5, p6, p7, nrow = 1, ncol = 3, labels = "AUTO")
 ```
 
